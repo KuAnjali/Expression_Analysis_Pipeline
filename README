@@ -1,0 +1,47 @@
+Checkout the folder from svn: svn checkout http://
+
+DO: make -f Makefile (already present in the folder) ---> This will create a folder "target" where all the scripts required for the pipeline will be copied automatically.
+
+USAGE: python RNAseq_main.v1.py input.txt config.txt
+
+SERVER: pauling
+
+Example: 
+
+ProjectID	Medgenome_SampleID	ClientID	R1_FASTQ_PATH	R2_FASTQ_PATH	outDir	Grouping
+P27654_O51865	55532	Control-K6-2	ANALYSIS/P27654_O51865/Raw_files/Control-K6-2_R1.fastq.gz	ANALYSIS/P27654_O51865/Raw_files/Control-K6-2_R2.fastq.gz	ANALYSIS/anjali.k/Final_RNAseq_pipeline	Control
+
+Important Notes:
+
+	- To start the pipeline, it takes input.txt file from the user. The columns should be tab seperated in the input.txt file.
+
+	- While creating input file, first put all the control samples and than case samples. Please follow this hierarcy, it is important for 		 Differential expression analysis.
+	
+	- This pipeline is only for 2 group (Case and Control) comparison not for multiple group combination.
+
+	- For Differential expression, grouping information is required. In the last column of input.txt file, define whether the sample belong		 s to Control group or Case group.	
+
+	- In the outDir path: a folder will get created with ProjectID name and inside individual folder with ClientID will gets created.
+
+Config file: Tab seperated file. Turn on the flags according to the project requirements. For running any step after FEATURE_COUNT, the FEATURE_COUNT flag should remain 1. As DESEQ2, DESEQ2_GENE_FILTER and PATHWAY can only be run after featurecount step which makes input file for Deseq2. 
+We can add as many number of mail ID's comma separated to send out the combined pdf of QC report in their mail ID.
+
+FASTQC	1
+FASTQC_SUMMARY	1
+ADAP_TRIM	1
+CONTAMINATION_REMOVAL	1
+ALIGNMENT	1
+BAM_PROCESSING	1
+SEQUENCE_ALIGNED_DISTRIBUTION	1
+SPLICE_JUNCTION_DISTRIBUTION	1
+CUFFLINK	1
+FEATURE_COUNT	1
+DESEQ2	1
+DESEQ2_GENE_FILTER	1
+PATHWAY	1
+REPORT	1
+MAIL_ID	user@mailid.com
+
+
+
+

@@ -1,0 +1,176 @@
+#Files path used in this pipeline has been defined in the app.cfg file
+
+Step: 1 FASTQC
+
+Running FASTQC
+
+Output:	ProjectID_FastQC.pdf 
+
+Step: 2 FASTQC_SUMMARY
+
+Calculate the statistics like: Total No. of Reads, Average Base Quality, GC Percentage, Total Data >= Q30 %, Total Data >= Q20 and < 30 %, Total Data >= Q10 and < 20 %, Average Read Length
+
+Output: outDir/ProjectID/FastQSummary.txt
+
+Step: 3 ADAP_TRIM using Trimmomatic-0.36 version tool
+
+Trimmomatic path : /opt/Trimmomatic-0.36/trimmomatic-0.36.jar
+
+Command: 
+
+java -Xmx8000M -jar /opt/Trimmomatic-0.36/trimmomatic-0.36.jar PE ClientID.R1.fastq ClientID.R2.fastq ClientID.R1_AT.PE.fq.gz ClientID.R1_AT.SE.fq.gz ClientID.R2_AT.PE.fq.gz ClientID.R2_AT.SE.fq.gz -threads 32 ILLUMINACLIP:/opt/Trimmomatic-0.36/adapters/TruSeq3-PE.fa:2:30:10:2:true LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 &>> trimmed_reads.log
+
+Options: 
+
+	ILLUMINACLIP:TruSeq3-PE.fa:2:30:10:2 	-	Remove adapters 
+	LEADING:3				-	Remove leading low quality or N bases (below quality 3)
+	TRAILING:3				-	Remove trailing low quality or N bases (below quality 3)
+	SLIDINGWINDOW:4:15			-	Scan the read with a 4-base wide sliding window, cutting when the average quality per base drops below 15 
+	MINLEN:36				-	Drop reads below the 36 bases long
+
+Output : ClientID.R1_AT.PE.fq.gz, ClientID.R2_AT.PE.fq.gz will be taken for the further analysis process.
+
+Step: 4 CONTAMINATION_REMOVAL using bowtie2
+
+Bowtie2 path : bowtie2-2.2.4-linux-x86_64/bowtie2-2.2.4/bowtie2
+
+HG19 contamination Index: Genome/HUMAN/Contamination/Human/contamination/Bowtie2/hg19.contamination.fa
+
+Command:
+
+bowtie2-2.2.4-linux-x86_64/bowtie2-2.2.4/bowtie2 -x Genome/HUMAN/Contamination/Human/contamination/Bowtie2/hg19.contamination.fa -p 30 -N 1 -1 ClientID.R1_AT.PE.fq.gz -2 ClientID.R2_AT.PE.fq.gz --un-conc uncontaminated.fq  -S uncontaminated.sam &> contamination_removal.log
+
+Options:
+	-N : Sets the number of mismatches to allowed in a seed alignment during multiseed alignment.
+	-x : hg19 index
+	-p : threads NTHREADS
+	--un-conc : Write paired-end reads that fail to align concordantly to file.
+	-S : File to write SAM alignments to.
+
+Output: ClientID.uncontaminated.1.fq, ClientID.uncontaminated.1.fq taken for the further alignment process.
+
+Step: 5	ALIGNMENT using Hisat2
+
+Hisat2 path : /opt/hisat2-2.1.0
+
+HG19 hisat index: RESOURCES/HG19_GENOME/HISAT2/hg19
+
+Command:
+
+/opt/hisat2-2.1.0/hisat2 -p 32  --dta-cufflinks -x RESOURCES/HG19_GENOME/HISAT2/hg19/genome -1 uncontaminated.1.fq -2 uncontaminated.2.fq -S outDir/ProjectID/ClientID/ClientID_HISAT2_aligned.sam --summary-file alignment_summary.txt
+
+
+Options:
+	--dta-cufflinks : Report alignments tailored specifically for Cufflinks. HISAT2 looks for novel splice sites with three signals (GT/AG, GC/AG, AT/AC), but all user-provided splice sites are used irrespective of their signals. HISAT2 produces an optional field, XS:A:[+-], for every spliced alignment.
+
+	-x : The basename of the index for the reference genome.
+	-S : File to write SAM alignments to.
+	--summary-file : Print alignment summary to this file.
+
+
+Sam to Bam:
+
+APPS/samtools-1.2/samtools view -Sbuh -o outDir/ProjectID/ClientID/ClientID_HISAT2_aligned.bam outDir/ProjectID/ClientID/ClientID_HISAT2_aligned.sam
+
+Step: 6 BAM_PROCESSING : Sorting and Indexing of Bam file
+
+Sorting :
+	APPS/samtools-1.2/samtools sort -T temp -@ 5 -o outDir/ProjectID/ClientID/ClientID_HISAT2_aligned.sorted.bam -O bam outDir/ProjectID/ClientID/ClientID_HISAT2_aligned.bam
+
+Indexing :
+	APPS/samtools-1.2/samtools index outDir/ProjectID/ClientID/ClientID_HISAT2_aligned.sorted.bam
+
+
+Step: 7 SEQUENCE_ALIGNED_DISTRIBUTION using qualimap
+
+Gives mapped read distribution : Exonic, Intronic, Intergenic, Overlapping Exon
+
+Qualimap path: /opt/qualimap_v2.2.1
+
+Command: /opt/qualimap_v2.2.1/qualimap rnaseq -bam outDir/ProjectID/ClientID/ClientID_HISAT2_aligned.bam --java-mem-size=4G -gtf Genome/HUMAN/STAR_Genome_hg19/NEW_Homo_sapiens.GRCh37.75.gtf -outdir outDir/ProjectID/ClientID/Qualimap/
+
+Step: 8 SPLICE_JUNCTION_DISTRIBUTION using rseqc
+
+	For given alignment file (-i) in BAM or SAM format and a reference gene model (-r) in BED format, this program will compare detected splice junctions to reference gene model. splicing annotation is performed in two levels: splice event level and splice junction level.
+
+	splice read: An RNA read, especially long read, can be spliced more than once, therefore, 100 spliced reads can produce >= 100 splicing events.
+	splice junction: multiple splicing events spanning the same intron can be consolidated into one splicing junction.
+
+Detected junctions were divided to 3 exclusive categories:
+
+	1. Annotated (known): The junction is part of the gene model. Both splice sites, 5’ splice site (5’SS) and 3’splice site (3’SS) are annotated by reference gene model.
+	2. Complete_novel: Both 5’SS and 3’SS are novel.
+	3. Partial_novel: One of the splice site (5’SS or 3’SS) is novel, and the other splice site is annotated
+
+rseqc path: /opt/RSeQC-2.6.4/scripts/junction_annotation.py
+
+Command: python /opt/RSeQC-2.6.4/scripts/junction_annotation.py -i outDir/ProjectID/ClientID/ClientID_HISAT2_aligned.bam -o outDir/ProjectID/ClientID/Splice_Junction/ClientID_junction_annot -r Genome/HUMAN/STAR_Genome_hg19/NEW_Homo_sapiens.GRCh37.75.bed12 &> outDir/ProjectID/ClientID/Splice_Junction/ClientID_junction_annot_summary.txt
+
+Step: 9 CUFFLINK
+
+Cufflink path: cufflinks-2.2.1.Linux_x86_64/cufflinks
+
+Command: cufflinks-2.2.1.Linux_x86_64/cufflinks -o outDir/ProjectID/ClientID/CUFFLINK  -p 15 --library-type fr-firststrand --max-bundle-length 6000000 --max-bundle-frags 10000000000000 -G Genome/HUMAN/STAR_Genome_hg19/NEW_Homo_sapiens.GRCh37.75.gtf -L %s outDir/ProjectID/ClientID/ClientID_HISAT2_aligned.sorted.bam
+
+Output: outDir/ProjectID/ClientID/CUFFLINK/
+
+Step: 10 FEATURE_COUNT
+
+Counts mapped reads for genomic features (genes). It output numbers of reads assigned to features. 
+
+Fetaure count path: /opt/subread-1.5.2-Linux-x86_64/bin/featureCounts
+
+Command : /opt/subread-1.5.2-Linux-x86_64/bin/featureCounts -Q 10 -s 0 -T 8 -a Genome/HUMAN/STAR_Genome_hg19/NEW_Homo_sapiens.GRCh37.75.gtf -o outDir/ProjectID/ClientID/ClientID_FeatureCount.txt outDir/ProjectID/ClientID/ClientID_HISAT2_aligned.sorted.bam 
+
+
+Extracting only the readcount for each of genomic feature using awk command:
+
+awk 'FNR > 2 {print $1, $NF}'  outDir/ProjectID/ClientID/ClientID_FeatureCount.txt >>  outDir/ProjectID/ClientID/ClientID_FeatureCount_final.txt
+
+###In this same flag, we are merging readcounts for each sample into 1 file which will be used as an input for deseq2
+
+outDir/ProjectID/merge_file_input.txt : will have outDir/ProjectID/ClientID_FeatureCount_final.txt	ClientID	experi_group
+
+NOTE: Flags such as DESEQ2, DESEQ2_GENE_FILTER, PATHWAY can only be run when FEATURE_COUNT flag is 1. As the output of featurecount, is the input for Deseq2. After finishing featurecount for all the samples provided by the user in input file, script will create a final merge input after merging all the featurecount output into one file. outDir/ProjectID/Deseq_input_merge_count.txt
+
+If FEATURE_COUNT flag is 1, than proceed with step 9 onwards.
+
+Step: 11 DESEQ2
+
+input file: outDir/ProjectID/Deseq_input_merge_count.txt
+
+It will create an R Script to run Deseq2: outDir/ProjectID/Deseq2.R
+
+Outputs:
+	Deseq_result.txt
+	Deseq_normalised_result.txt - Contains the normalised read count for the genomic features (genes)
+
+Step: 12 DESEQ2_GENE_FILTER
+
+It will filter the genes upregulated and downregulated based on padj values and log2foldchange.
+
+Condition for upregulated genes: log2foldchange>=1 and padj<=0.05
+Condition for downregulated genes: log2foldchange<=-1 and padj<=0.05
+
+Output: Upregulated_genes_deseq2.txt, Downregulated_genes_deseq2.txt
+
+Adding genename to the Up and downregulated gene list:
+	awk 'FNR==NR{a[$2]=$1;next} ($1 in a) {print a[$1],$0}' RESOURCES/RNAseq_pipeline_files/ENSGID_Genename.txt outDir/ProjectID/Upregulated_genes_deseq2.txt > outDir/ProjectID/Upregulated_genename_deseq2.txt
+
+Extracting the normalised read count values for top50 genes from the upregulated and downregulated gene list and plot it into Heatmap graph.
+
+Output : Combined_top50_genes_normalised_readcount_genename.txt
+
+Step: 13 PATHWAY
+
+Pathway analysis for Downregulated genes using Reactome_2016, WikiPathways_2016, KEGG_2016, GO_Molecular_Function_2018, GO_Cellular_Component_2018, GO_Biological_Process_2018, Pfam_InterPro_Domains Started.
+
+Here we have implemented EnrichR package for pathway analysis.
+
+
+
+
+
+
+
+
