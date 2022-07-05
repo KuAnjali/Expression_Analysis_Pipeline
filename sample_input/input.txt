@@ -1,0 +1,5 @@
+ProjectID	Medgenome_SampleID	ClientID	R1_FASTQ_PATH	R2_FASTQ_PATH	outDir	Grouping
+P27654_O51865	55532	Control-K6-2	Raw_files/Control-K6-2_R1.fastq.gz	Raw_files/Control-K6-2_R2.fastq.gz	Final_RNAseq_pipeline/test	Control
+P27654_O51865	55533	Control-K6	Raw_files/Control-K6_R1.fastq.gz	Raw_files/Control-K6_R2.fastq.gz	Final_RNAseq_pipeline/test	Control
+P27654_O51865	55534	Kd-K6-2	Raw_files/Kd-K6-2_R1.fastq.gz	Raw_files/Kd-K6-2_R2.fastq.gz	Final_RNAseq_pipeline/test	Case
+P27654_O51865	55535	Kd-K6	Raw_files/Kd-K6_R1.fastq.gz	Raw_files/Kd-K6_R2.fastq.gz	Final_RNAseq_pipeline/test	Case
